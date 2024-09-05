@@ -1,0 +1,394 @@
+<html><head><base href="https://wormgame.io/" /><title>지렁이의 식품군 탐험</title>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #f0f8ff;
+    font-family: 'Arial', sans-serif;
+  }
+  #gameCanvas {
+    display: none;
+    transition: background-color 1s ease;
+  }
+  #mission {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #4a4a4a;
+    background-color: rgba(255, 255, 255, 0.7);
+    padding: 15px;
+    border-radius: 15px;
+    font-family: 'Arial', sans-serif;
+  }
+  #startScreen, #gameOverScreen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background-color: rgba(255, 255, 255, 0.9);
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+  }
+  #gameOverScreen {
+    display: none;
+  }
+  #startButton, #restartButton {
+    font-size: 24px;
+    padding: 15px 30px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  #startButton:hover, #restartButton:hover {
+    background-color: #45a049;
+  }
+  #rules {
+    margin-top: 20px;
+    font-size: 18px;
+    color: #333;
+    text-align: left;
+  }
+  #creator {
+    font-size: 16px;
+    color: #666;
+    margin-top: 20px;
+  }
+  #source {
+    font-size: 14px;
+    color: #888;
+    margin-top: 10px;
+  }
+  #nicknameInput {
+    font-size: 20px;
+    padding: 10px;
+    margin-bottom: 20px;
+    width: 80%;
+    max-width: 300px;
+    border: 2px solid #4CAF50;
+    border-radius: 5px;
+  }
+  #finalScore {
+    font-size: 36px;
+    font-weight: bold;
+    color: #4CAF50;
+    margin: 20px 0;
+  }
+  #finalNickname {
+    font-size: 24px;
+    color: #333;
+    margin-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="mission"></div>
+<div id="startScreen">
+  <h1>지렁이의 식품군 탐험</h1>
+  <div id="creator">(재연쌤이 만들었음V)</div>
+  <div id="source">출처@gajae_ssam</div>
+  <input type="text" id="nicknameInput" placeholder="닉네임을 입력하세요" maxlength="10">
+  <button id="startButton">게임 시작</button>
+  <div id="rules">
+    <h2>게임 규칙:</h2>
+    <ul>
+      <li>마우스를 움직여 귀여운 지렁이를 조종하세요.</li>
+      <li>화면에 표시되는 미션에 맞는 음식을 먹으세요.</li>
+      <li>미션에 맞는 음식을 먹으면 지렁이가 길어지고 점수가 올라갑니다.</li>
+      <li>미션과 맞지 않는 음식을 먹으면 지렁이가 짧아지고 점수가 줄어듭니다.</li>
+      <li>지렁이의 머리, 몸통, 꼬리 모두 음식과 닿으면 먹은 것으로 간주됩니다.</li>
+      <li>미션은 15초마다 바뀌며, 배경색도 함께 변경됩니다.</li>
+      <li>점수가 높아질수록 화면에 더 많은 음식이 나타나 난이도가 올라갑니다.</li>
+      <li>가능한 높은 점수를 얻으세요!</li>
+    </ul>
+  </div>
+</div>
+<div id="gameOverScreen">
+  <h1>게임 종료</h1>
+  <div id="finalNickname"></div>
+  <div id="finalScore"></div>
+  <button id="restartButton">다시 시작</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const missionDisplay = document.getElementById('mission');
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const startButton = document.getElementById('startButton');
+const restartButton = document.getElementById('restartButton');
+const nicknameInput = document.getElementById('nicknameInput');
+const finalScoreDisplay = document.getElementById('finalScore');
+const finalNicknameDisplay = document.getElementById('finalNickname');
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let worm = {
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  segments: [],
+  maxLength: 20,
+  speed: 5,
+};
+
+let food = [];
+let currentMission = '';
+let score = 0;
+let gameStarted = false;
+let nickname = '';
+
+const missions = [
+  { type: '곡류', foods: ['밥', '빵', '국수', '옥수수', '감자'], color: '#FFE4B5' },
+  { type: '고기, 생선, 달걀, 콩류', foods: ['두부', '소고기', '닭고기', '달걀', '연어'], color: '#FFD700' },
+  { type: '우유, 유제품류', foods: ['우유', '치즈', '요구르트'], color: '#F0FFFF' },
+  { type: '채소류와 과일류', foods: ['사과', '바나나', '당근', '브로콜리', '토마토'], color: '#98FB98' },
+];
+
+const foodEmojis = {
+  '밥': '🍚', '빵': '🍞', '국수': '🍜', '옥수수': '🌽', '감자': '🥔',
+  '두부': '🧊', '소고기': '🥩', '닭고기': '🍗', '달걀': '🥚', '연어': '🍣',
+  '우유': '🥛', '치즈': '🧀', '요구르트': '🍶',
+  '사과': '🍎', '바나나': '🍌', '당근': '🥕', '브로콜리': '🥦', '토마토': '🍅'
+};
+
+function generateFood() {
+  const missionIndex = Math.floor(Math.random() * missions.length);
+  const foodType = missions[missionIndex].foods;
+  const foodItem = foodType[Math.floor(Math.random() * foodType.length)];
+  let x, y;
+  let overlap;
+  const minDistance = 70;
+
+  do {
+    overlap = false;
+    x = Math.random() * (canvas.width - 100) + 50;
+    y = Math.random() * (canvas.height - 100) + 50;
+
+    for (let f of food) {
+      const dx = x - f.x;
+      const dy = y - f.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < minDistance) {
+        overlap = true;
+        break;
+      }
+    }
+  } while (overlap);
+
+  return { x, y, type: foodItem };
+}
+
+function setNewMission() {
+  const newMission = missions[Math.floor(Math.random() * missions.length)];
+  currentMission = newMission.type;
+  missionDisplay.textContent = `미션: ${currentMission} 먹기`;
+  canvas.style.backgroundColor = newMission.color;
+}
+
+function init() {
+  worm = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    segments: [],
+    maxLength: 20,
+    speed: 5,
+  };
+  food = [];
+  score = 0;
+  setNewMission();
+  updateFoodCount();
+}
+
+function updateFoodCount() {
+  const baseCount = 60;
+  const additionalCount = Math.floor(score / 150);
+  const totalCount = baseCount + additionalCount;
+  
+  while (food.length < totalCount) {
+    food.push(generateFood());
+  }
+}
+
+function update(targetX, targetY) {
+  let dx = targetX - worm.x;
+  let dy = targetY - worm.y;
+  let distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance > 1) {
+    if (distance > worm.speed) {
+      worm.x += (dx / distance) * worm.speed;
+      worm.y += (dy / distance) * worm.speed;
+    } else {
+      worm.x = targetX;
+      worm.y = targetY;
+    }
+
+    worm.segments.unshift({ x: worm.x, y: worm.y });
+
+    if (worm.segments.length > worm.maxLength) {
+      worm.segments.pop();
+    }
+  } else {
+    if (worm.segments.length === 0 || 
+        (worm.x !== worm.segments[0].x || worm.y !== worm.segments[0].y)) {
+      worm.segments.unshift({ x: worm.x, y: worm.y });
+      if (worm.segments.length > worm.maxLength) {
+        worm.segments.pop();
+      }
+    }
+  }
+
+  checkFoodCollision();
+  updateFoodCount();
+}
+
+function checkFoodCollision() {
+  for (let i = food.length - 1; i >= 0; i--) {
+    const f = food[i];
+    let collision = false;
+
+    for (let segment of worm.segments) {
+      const dx = segment.x - f.x;
+      const dy = segment.y - f.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < 30) {
+        collision = true;
+        break;
+      }
+    }
+
+    if (collision) {
+      const foodMissionType = missions.find(m => m.foods.includes(f.type)).type;
+      if (foodMissionType === currentMission) {
+        worm.maxLength += 5;
+        score += worm.maxLength;
+      } else {
+        worm.maxLength = Math.max(10, worm.maxLength - 3);
+        score = Math.max(0, score - 50);
+      }
+      food.splice(i, 1);
+      food.push(generateFood());
+    }
+  }
+}
+
+function drawWorm() {
+  ctx.save();
+  ctx.lineWidth = 36;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255, 182, 193, 0.8)';
+  
+  ctx.beginPath();
+  ctx.moveTo(worm.segments[0].x, worm.segments[0].y);
+  for (let i = 1; i < worm.segments.length; i++) {
+    ctx.lineTo(worm.segments[i].x, worm.segments[i].y);
+  }
+  ctx.stroke();
+
+  const head = worm.segments[0];
+  ctx.fillStyle = 'rgba(255, 182, 193, 0.8)';
+  ctx.beginPath();
+  ctx.arc(head.x, head.y, 18, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'black';
+  ctx.beginPath();
+  ctx.arc(head.x - 6, head.y - 3, 2, 0, Math.PI * 2);
+  ctx.arc(head.x + 6, head.y - 3, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(head.x, head.y + 3, 8, 0.2 * Math.PI, 0.8 * Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  drawWorm();
+
+  ctx.font = '42px Arial';
+  for (const f of food) {
+    ctx.fillText(foodEmojis[f.type], f.x - 20, f.y + 16);
+    ctx.font = '16px Arial';
+    ctx.fillStyle = '#4a4a4a';
+    ctx.fillText(f.type, f.x - 25, f.y + 40);
+  }
+
+  ctx.fillStyle = '#4a4a4a';
+  ctx.font = 'bold 32px Arial';
+  ctx.fillText(`${nickname}: ${score}점`, canvas.width - 300, 50);
+}
+
+function gameLoop() {
+  if (gameStarted) {
+    update(mouseX, mouseY);
+    draw();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+let mouseX = canvas.width / 2;
+let mouseY = canvas.height / 2;
+
+canvas.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+});
+
+function startGame() {
+  gameStarted = true;
+  startScreen.style.display = 'none';
+  gameOverScreen.style.display = 'none';
+  canvas.style.display = 'block';
+  init();
+  setInterval(setNewMission, 15000);
+}
+
+function endGame() {
+  gameStarted = false;
+  canvas.style.display = 'none';
+  gameOverScreen.style.display = 'block';
+  finalScoreDisplay.textContent = `최종 점수: ${score}점`;
+  finalNicknameDisplay.textContent = `닉네임: ${nickname}`;
+}
+
+startButton.addEventListener('click', () => {
+  nickname = nicknameInput.value.trim();
+  if (nickname === '') {
+    alert('닉네임을 입력해주세요!');
+    return;
+  }
+  startGame();
+});
+
+restartButton.addEventListener('click', () => {
+  startGame();
+});
+
+// 게임 종료 조건 (예: 60초 후 게임 종료)
+setTimeout(() => {
+  if (gameStarted) {
+    endGame();
+  }
+}, 60000);
+
+gameLoop();
+</script>
+</body></html>
